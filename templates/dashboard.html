@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Smart Home Security Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body { display: flex; min-height: 100vh; background: #0b1120; color: #f1f5f9; }
+
+    .sidebar {
+      width: 250px;
+      min-width: 250px;
+      background: #0f172a;
+      border-right: 1px solid #1e293b;
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .brand { font-size: 16px; font-weight: bold; color: #38bdf8; margin-bottom: 6px; }
+    .user-meta {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #1e293b;
+      line-height: 1.6;
+    }
+    .nav-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 11px 12px;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .nav-btn:hover { background: #1e293b; color: #ffffff; }
+    .nav-btn.active { background: #0284c7; color: #ffffff; font-weight: bold; }
+
+    .logout-btn {
+      display: block;
+      text-align: center;
+      padding: 9px;
+      background: #dc2626;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .main { flex: 1; padding: 24px; overflow-y: auto; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .section-panel { display: none; }
+    .section-panel.active { display: block; }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 22px; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
+    .card h3 { font-size: 15px; margin-bottom: 10px; color: #e2e8f0; }
+
+    iframe.feed { width: 100%; height: 185px; border: 1px solid #334155; border-radius: 6px; background: #020617; margin-bottom: 10px; }
+
+    .btn {
+      display: inline-block;
+      padding: 7px 12px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #fff;
+      text-decoration: none;
+    }
+    .btn-primary { background: #2563eb; }
+    .btn-warning { background: #d97706; }
+    .btn-danger { background: #dc2626; }
+    .btn-success { background: #16a34a; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { border: 1px solid #1e293b; padding: 9px 10px; text-align: left; }
+    th { background: #1e293b; color: #f8fafc; }
+
+    .badge-ok { background: #14532d; color: #86efac; padding: 2px 7px; border-radius: 4px; font-size: 11px; }
+    .badge-alert { background: #7f1d1d; color: #fca5a5; padding: 2px 7px; border-radius: 4px; font-size: 11px; }
+
+    .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .flash.success { background: #14532d; color: #bbf7d0; }
+    .flash.danger { background: #7f1d1d; color: #fecaca; }
+    .flash.warning { background: #78350f; color: #fde68a; }
+
+    input, select {
+      padding: 7px 10px;
+      border-radius: 5px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #f8fafc;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <div class="brand">Smart Home Security</div>
+      <div class="user-meta">
+        User: <strong>{{ username }}</strong><br />
+        Role: <strong>{{ role }}</strong><br />
+        Alerts: <strong>{{ anomaly_count }}</strong>
+      </div>
+
+      <button type="button" class="nav-btn {% if section == 'overview' %}active{% endif %}" data-target="overview">
+        S02: Live Feeds &amp; Camera State
+      </button>
+      <button type="button" class="nav-btn {% if section == 'footage' %}active{% endif %}" data-target="footage">
+        S01: Encrypted Footage Vault
+      </button>
+      <button type="button" class="nav-btn {% if section == 'permissions' %}active{% endif %}" data-target="permissions">
+        S02: Role Permissions &amp; Logs
+      </button>
+      <button type="button" class="nav-btn {% if section == 'logs' %}active{% endif %}" data-target="logs">
+        S03: Audit &amp; Anomaly Trail
+      </button>
+    </div>
+
+    <a class="logout-btn" href="{{ url_for('logout') }}">Logout</a>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h2>Smart Home Camera Security System</h2>
+      <span id="active-section-label" style="font-size:13px;color:#94a3b8;">Active Section: {{ (section or 'overview')|upper }}</span>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- SECTION 1: OVERVIEW -->
+    <div id="panel-overview" class="section-panel {% if section == 'overview' or not section %}active{% endif %}">
+      <div class="cards">
+        {% for cam in cameras %}
+          <div class="card">
+            <h3>{{ cam.name }} — {% if cam.is_on == 1 %}<span class="badge-ok">ON</span>{% else %}<span class="badge-alert">OFF</span>{% endif %}</h3>
+            <iframe class="feed" src="{{ url_for('video_feed', cam_id=cam.id) }}"></iframe>
+
+            {% if role == 'admin' %}
+              <form method="POST" action="{{ url_for('toggle_camera', cam_id=cam.id) }}" style="display:inline;">
+                <button class="btn {% if cam.is_on == 1 %}btn-danger{% else %}btn-success{% endif %}" type="submit">
+                  Turn {% if cam.is_on == 1 %}OFF{% else %}ON{% endif %}
+                </button>
+              </form>
+              {% if cam.is_on == 1 %}
+                <form method="POST" action="{{ url_for('toggle_camera', cam_id=cam.id) }}" style="display:inline;">
+                  <input type="hidden" name="simulate_mismatch" value="1" />
+                  <button class="btn btn-warning" type="submit">Test Stuck-ON Anomaly</button>
+                </form>
+              {% endif %}
+            {% else %}
+              <span style="font-size:12px;color:#94a3b8;">View-only access (Role: {{ role }})</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- SECTION 2: FOOTAGE -->
+    <div id="panel-footage" class="section-panel {% if section == 'footage' %}active{% endif %}">
+      <div class="card">
+        <h3>Upload &amp; Store Encrypted Footage (S01)</h3>
+        {% if role == 'admin' %}
+          <form method="POST" action="{{ url_for('upload_footage') }}" enctype="multipart/form-data">
+            <select name="camera_id">
+              {% for cam in cameras %}
+                <option value="{{ cam.id }}">{{ cam.name }}</option>
+              {% endfor %}
+            </select>
+            <input type="file" name="video_file" accept=".mp4,.webm,.ogg,.mov" required />
+            <button class="btn btn-primary" type="submit">Upload &amp; Hash Footage</button>
+          </form>
+        {% else %}
+          <p style="font-size:13px;color:#94a3b8;">Only Parent/Admin can upload or access recorded footage vault.</p>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h3>Recorded Footage &amp; Integrity Status</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Camera</th>
+              <th>Filename</th>
+              <th>Size (MB)</th>
+              <th>SHA-256 Digest</th>
+              <th>Integrity</th>
+              <th>Playback</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in footage_list %}
+              <tr>
+                <td>{{ f.id }}</td>
+                <td>{{ f.camera_name or ('Cam ' ~ f.camera_id) }}</td>
+                <td>{{ f.filename }}</td>
+                <td>{{ f.file_size_mb }}</td>
+                <td style="font-family:monospace;font-size:11px;">{{ f.sha256_hash[:16] }}...</td>
+                <td>
+                  {% if f.integrity_status == 'Complete' %}
+                    <span class="badge-ok">Complete</span>
+                  {% else %}
+                    <span class="badge-alert">{{ f.integrity_status }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if role == 'admin' and f.integrity_status == 'Complete' %}
+                    <a class="btn btn-primary" href="{{ url_for('play_footage', footage_id=f.id) }}" target="_blank">Play Clip</a>
+                  {% else %}
+                    <span style="font-size:12px;color:#94a3b8;">Restricted / Unavailable</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7">No footage uploaded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECTION 3: PERMISSIONS -->
+    <div id="panel-permissions" class="section-panel {% if section == 'permissions' %}active{% endif %}">
+      {% if role == 'admin' %}
+        <div class="card">
+          <h3>Add Family / System User</h3>
+          <form method="POST" action="{{ url_for('add_user') }}">
+            <input type="text" name="username" placeholder="Username" required />
+            <input type="password" name="password" placeholder="Password" required />
+            <select name="role">
+              <option value="member">member (Child / Family)</option>
+              <option value="admin">admin (Parent)</option>
+            </select>
+            <button class="btn btn-success" type="submit">Add User</button>
+          </form>
+        </div>
+      {% endif %}
+
+      <div class="card">
+        <h3>System Users &amp; Roles</h3>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Username</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+              <tr><td>{{ u.id }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Camera State Change History</h3>
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Camera ID</th><th>Requested</th><th>Actual State</th><th>By</th><th>Alert</th></tr>
+          </thead>
+          <tbody>
+            {% for s in status_logs %}
+              <tr>
+                <td>{{ s.timestamp }}</td>
+                <td>{{ s.camera_id }}</td>
+                <td>{{ s.requested_state }}</td>
+                <td>{{ s.active_state }}</td>
+                <td>{{ s.updated_by }}</td>
+                <td>
+                  {% if s.anomaly_flag == 1 %}
+                    <span class="badge-alert">Anomaly</span>
+                  {% else %}
+                    <span class="badge-ok">Normal</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">No camera state changes recorded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECTION 4: LOGS -->
+    <div id="panel-logs" class="section-panel {% if section == 'logs' %}active{% endif %}">
+      <div class="card">
+        <h3>System Audit Trail &amp; Anomaly Alerts (S03)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Action</th>
+              <th>Time</th>
+              <th>IP</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+              <tr>
+                <td>{{ log.user }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ log.time }}</td>
+                <td>{{ log.ip_address or '127.0.0.1' }}</td>
+                <td>
+                  {% if (log.status or 'Authorized') == 'Authorized' %}
+                    <span class="badge-ok">Authorized</span>
+                  {% else %}
+                    <span class="badge-alert">{{ log.status }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">No audit entries found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const buttons = document.querySelectorAll('.nav-btn');
+    const panels = document.querySelectorAll('.section-panel');
+    const label = document.getElementById('active-section-label');
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-target');
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        panels.forEach(p => p.classList.remove('active'));
+        const activePanel = document.getElementById('panel-' + target);
+        if (activePanel) activePanel.classList.add('active');
+
+        if (label) label.textContent = 'Active Section: ' + target.toUpperCase();
+        history.replaceState(null, '', '/dashboard?section=' + target);
+      });
+    });
+  </script>
+</body>
+</html>
